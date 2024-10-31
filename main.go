@@ -31,9 +31,10 @@ func main() {
 	// Initialize GameRepository
 	gameRepo := &repositories.GameRepository{Db: dbInstance}
 	gameService := &services.GameService{GameRepository: gameRepo}
+	messageFormatter := &bot.MessageFormatter{}
 
 	// Start the bot with service dependency
-	b, err := bot.NewBot(cfg.BotToken, gameService)
+	b, err := bot.NewBot(cfg.BotToken, gameService, messageFormatter)
 	if err != nil {
 		log.Fatalf("Could not create bot: %v", err)
 	}

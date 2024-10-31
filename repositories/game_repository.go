@@ -9,6 +9,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type IGameRepository interface {
+	InsertGame(game *models.Game) (*models.Game, error)
+	GetLatestGameByChatID(chatID int64) (*models.Game, error)
+	InsertUser(user *models.User) (int64, error)
+	InsertGamePlayer(game *models.Game, player *models.User) (string, error)
+	GetUserById(playerId *int64) (*models.User, error)
+	GetUserByUserID(userId int64) (*models.User, error)
+	GetPlayerForGame(playerId uuid.UUID, gameId uuid.UUID) (*uuid.UUID, error)
+	GetGamePlayers(gameId uuid.UUID) ([]models.User, error)
+	UpdatePlayerPayment(gameId uuid.UUID, playerId uuid.UUID) error
+	UpdatePlayerGameStatus(gameId uuid.UUID, playerId uuid.UUID, status string) error
+}
+
 type GameRepository struct {
 	Db *sql.DB
 }
@@ -66,7 +79,9 @@ func (r *GameRepository) GetLatestGameByChatID(chatID int64) (*models.Game, erro
 			opponent, 
 			location, 
 			price,
-			date FROM games 
+			date,
+			created_by
+			FROM games 
 		WHERE chat_id = ? 
 		AND is_active = 1 
 		ORDER BY date DESC LIMIT 1`)
@@ -79,7 +94,7 @@ func (r *GameRepository) GetLatestGameByChatID(chatID int64) (*models.Game, erro
 	row := stmt.QueryRow(chatID)
 
 	game := &models.Game{}
-	err = row.Scan(&game.Id, &game.ChatId, &game.Opponent, &game.Location, &game.Price, &game.Date)
+	err = row.Scan(&game.Id, &game.ChatId, &game.Opponent, &game.Location, &game.Price, &game.Date, &game.CreatedBy)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -146,7 +161,7 @@ func (r *GameRepository) InsertGamePlayer(game *models.Game, player *models.User
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(&game.Id, &player.Id, "ATTENDING", false)
+	_, err = stmt.Exec(&game.Id, &player.Id, &player.Status, false)
 	if err != nil {
 		tx.Rollback()
 		return "", err
@@ -286,4 +301,23 @@ func (r *GameRepository) UpdatePlayerPayment(gameId uuid.UUID, playerId uuid.UUI
 
 	return nil
 
+}
+
+func (r *GameRepository) UpdatePlayerGameStatus(gameId uuid.UUID, playerId uuid.UUID, status string) error {
+	stmt, err := r.Db.Prepare(
+		`UPDATE game_players 
+		SET status = ? 
+		WHERE game_id = ? 
+		AND user_id = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(status, gameId.String(), playerId.String())
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

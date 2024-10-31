@@ -8,11 +8,12 @@ import (
 )
 
 type Bot struct {
-	TelegramBot *telebot.Bot
-	GameService *services.GameService
+	TelegramBot     *telebot.Bot
+	MessageFormater IMessageFormater
+	GameService     services.IGameService
 }
 
-func NewBot(token string, gameService *services.GameService) (*Bot, error) {
+func NewBot(token string, gameService services.IGameService, messageFormater IMessageFormater) (*Bot, error) {
 	bot, err := telebot.NewBot(telebot.Settings{
 		Token:  token,
 		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
@@ -22,8 +23,9 @@ func NewBot(token string, gameService *services.GameService) (*Bot, error) {
 	}
 
 	b := &Bot{
-		TelegramBot: bot,
-		GameService: gameService,
+		TelegramBot:     bot,
+		MessageFormater: messageFormater,
+		GameService:     gameService,
 	}
 
 	b.setupHandlers()
@@ -33,6 +35,7 @@ func NewBot(token string, gameService *services.GameService) (*Bot, error) {
 func (b *Bot) setupHandlers() {
 	b.TelegramBot.Handle(NEW.Name, b.handleNewGame)
 	b.TelegramBot.Handle(REGISTER.Name, b.handleRegisterPlayer)
+	b.TelegramBot.Handle(OUT.Name, b.handleRegisterPlayer)
 	b.TelegramBot.Handle(HELP.Name, b.handleHelp)
 	b.TelegramBot.Handle(DETAILS.Name, b.handleDetails)
 	b.TelegramBot.Handle(PAID.Name, b.handlePaid)

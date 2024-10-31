@@ -12,18 +12,32 @@ import (
 	"github.com/google/uuid"
 )
 
-type GameService struct {
-	GameRepository *repositories.GameRepository
+type PlayerStatus string
+
+const (
+	ATTENDING PlayerStatus = "ATTENDING"
+	OUT       PlayerStatus = "OUT"
+)
+
+type IGameService interface {
+	CreateNewGame(chatId int64, userId int64, userName string, gameData []string) (*models.Game, *[]models.User, *[]models.User, error)
+	RegisterPlayer(chatId *int64, userId *int64, userName *string, status PlayerStatus) (*models.Game, *[]models.User, *[]models.User, error)
+	GetGameDetails(chatId int64) (*models.Game, *[]models.User, *[]models.User, error)
+	RepayGame(chatId *int64, userId *int64, userName *string) (*models.Game, *[]models.User, *[]models.User, error)
 }
 
-func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string, gameData []string) (string, error) {
+type GameService struct {
+	GameRepository repositories.IGameRepository
+}
+
+func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string, gameData []string) (*models.Game, *[]models.User, *[]models.User, error) {
 
 	userFound, err := g.GameRepository.GetUserByUserID(userId)
 	if err != nil {
 		log.Printf("Error retrieving user: %v", err)
-		return "", fmt.Errorf("Could not retrieve user, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not retrieve user, please try again.")
 	}
-
+	log.Printf("User found: %v", userFound)
 	if userFound == nil {
 		newUser := &models.User{
 			Id:     uuid.New(),
@@ -31,20 +45,21 @@ func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string,
 			Name:   userName,
 		}
 		_, err = g.GameRepository.InsertUser(newUser)
+		userFound = newUser
 		if err != nil {
 			log.Printf("Error creating user: %v", err)
-			return "", fmt.Errorf("Could not create user, please try again.")
+			return nil, nil, nil, fmt.Errorf("Could not create user, please try again.")
 		}
 	}
 
 	prev_game, err := g.GameRepository.GetLatestGameByChatID(chatId)
 	if err != nil {
 		log.Printf("Could not find the latest game: %v", err)
-		return "", fmt.Errorf("Could not find the latest game, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not find the latest game, please try again.")
 	}
 
 	if prev_game != nil && prev_game.Date.After(time.Now()) {
-		return "", fmt.Errorf("There is already a game scheduled on %s against %s",
+		return nil, nil, nil, fmt.Errorf("There is already a game scheduled on %s against %s",
 			prev_game.Date.Format("2006-01-02 15:04"),
 			prev_game.Opponent)
 	}
@@ -53,7 +68,7 @@ func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string,
 	dateTimeStr := fmt.Sprintf("%s %s", dateStr, timeStr)
 	dateTime, err := time.Parse("2006-01-02 15:04", dateTimeStr)
 	if err != nil {
-		return "", fmt.Errorf("Invalid date or time format. Please use YYYY-MM-DD HH:MM.")
+		return nil, nil, nil, fmt.Errorf("Invalid date or time format. Please use YYYY-MM-DD HH:MM.")
 	}
 
 	location := gameData[2]
@@ -70,25 +85,37 @@ func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string,
 		priceStr := gameData[4]
 		price, err := strconv.ParseFloat(priceStr, 64)
 		if err != nil {
-			return "", fmt.Errorf("Invalid price format. Please provide a valid number.")
+			return nil, nil, nil, fmt.Errorf("Invalid price format. Please provide a valid number.")
 		}
 		game.Price = price
 	}
 
 	_, err = g.GameRepository.InsertGame(game)
 	if err != nil {
-		return "", fmt.Errorf("Could not create game, please try again. %v", err)
+		return nil, nil, nil, fmt.Errorf("Could not create game, please try again. %v", err)
 	}
-	return fmt.Sprintf("Game created!\nDate: %s\nLocation: %s\nTime: %s\nOpponent: %s",
-		game.Date.Format("2006-01-02"), game.Location, game.Date.Format("15:04"), game.Opponent), nil
+
+	var players *[]models.User
+	var absentees *[]models.User
+
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
+	}
+	game, players, absentees, err = g.GetGameDetails(chatId)
+	log.Printf("Game created successfully: %v", game)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
+	}
+	return game, players, absentees, nil
+
 }
 
-func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *string) (string, error) {
+func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *string, status PlayerStatus) (*models.Game, *[]models.User, *[]models.User, error) {
 
 	game, err := g.GameRepository.GetLatestGameByChatID(*chatID)
 	if err != nil {
 		log.Printf("Could not find the latest game: %v", err)
-		return "", fmt.Errorf("Could not find the latest game, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not find the latest game, please try again.")
 	}
 
 	idFound, _ := g.GameRepository.GetUserByUserID(*userId)
@@ -99,90 +126,103 @@ func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *str
 			Id:     uuid.New(),
 			UserId: *userId,
 			Name:   *userName,
+			Status: string(status),
 		}
 		*userId, err = g.GameRepository.InsertUser(player)
 		if err != nil {
 			log.Printf("Error creating player: %v", err)
-			return "", fmt.Errorf("Could not create player, please try again.")
+			return nil, nil, nil, fmt.Errorf("Could not create player, please try again.")
 		}
 	} else {
 		player = idFound
+		player.Status = string(status)
 	}
 
 	playerForGameId, _ := g.GameRepository.GetPlayerForGame(player.Id, game.Id)
 
 	if playerForGameId != nil {
-		log.Printf("Player already registered to the game")
-		return "", fmt.Errorf("%s already registered for the game.", player.Name)
+		g.GameRepository.UpdatePlayerGameStatus(game.Id, player.Id, string(status))
+		game, players, absentees, err := g.GetGameDetails(*chatID)
+		if err != nil {
+			log.Printf("Error retrieving game details: %v", err)
+			return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
+		}
+		return game, players, absentees, nil
 	}
 
 	_, err = g.GameRepository.InsertGamePlayer(game, player)
 	if err != nil {
 		log.Printf("Error registering player to game: %v", err)
-		return "", fmt.Errorf("Could not register player, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not register player, please try again.")
 	}
-	return fmt.Sprintf("%s registered to the game against %s on %s", player.Name, game.Opponent, game.Date.Format("2006-01-02 15:04")), nil
-}
-
-func (g *GameService) GetGameDetails(chatID int64) (string, error) {
-	game, err := g.GameRepository.GetLatestGameByChatID(chatID)
+	game, players, absentees, err := g.GetGameDetails(*chatID)
 	if err != nil {
 		log.Printf("Error retrieving game details: %v", err)
-		return "", fmt.Errorf("Could not retrieve game details, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
 	}
-	if game == nil {
-		return "No game scheduled.", nil
+	return game, players, absentees, nil
+}
+
+func (g *GameService) GetGameDetails(chatID int64) (*models.Game, *[]models.User, *[]models.User, error) {
+	game, err := g.GameRepository.GetLatestGameByChatID(chatID)
+	if err != nil || game == nil {
+		log.Printf("Error retrieving game details: %v", err)
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
 	}
 
-	players, err := g.GameRepository.GetGamePlayers(game.Id)
+	allPlayers, err := g.GameRepository.GetGamePlayers(game.Id)
+	var players []models.User
+	var absentees []models.User
+	for _, player := range allPlayers {
+		if player.Status == "OUT" {
+			absentees = append(absentees, player)
+		}
+		if player.Status == "ATTENDING" {
+			players = append(players, player)
+		}
+	}
 
 	if err != nil {
 		log.Printf("Error retrieving game players: %v", err)
-		return "", fmt.Errorf("Could not retrieve game players, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game players, please try again.")
 	}
-
-	playerList := ""
-	for i, player := range players {
-		playerList += fmt.Sprintf("%d. %s", i+1, player.Name)
-		if player.HasPaid {
-			playerList += " ✅"
-		}
-		playerList += "\n"
-	}
-
-	return fmt.Sprintf("Game against %s on %s at %s\nLocation: %s\nPrice: %.2f\nPlayers:\n%s",
-		game.Opponent, game.Date.Format("2006-01-02"), game.Date.Format("15:04"), game.Location, game.Price, playerList), nil
+	return game, &players, &absentees, nil
 }
 
-func (g *GameService) RepayGame(chatID *int64, userId *int64, userName *string) (string, error) {
+func (g *GameService) RepayGame(chatID *int64, userId *int64, userName *string) (*models.Game, *[]models.User, *[]models.User, error) {
 	game, err := g.GameRepository.GetLatestGameByChatID(*chatID)
 	if err != nil {
 		log.Printf("Could not find the latest game: %v", err)
-		return "", fmt.Errorf("Could not find the latest game, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not find the latest game, please try again.")
 	}
 
 	player, err := g.GameRepository.GetUserByUserID(*userId)
 	if err != nil {
 		log.Printf("Could not find the player: %v", err)
-		return "", fmt.Errorf("Could not find the player, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not find the player, please try again.")
 	}
 
 	playerForGameId, err := g.GameRepository.GetPlayerForGame(player.Id, game.Id)
 	if err != nil {
 		log.Printf("Could not find the player for the game: %v", err)
-		return "", fmt.Errorf("Could not find the player for the game, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not find the player for the game, please try again.")
 	}
 
 	if playerForGameId == nil {
 		log.Printf("Player not registered for the game")
-		return "", fmt.Errorf("%s is not registered for the game.", player.Name)
+		return nil, nil, nil, fmt.Errorf("%s is not registered for the game.", player.Name)
 	}
 
 	err = g.GameRepository.UpdatePlayerPayment(game.Id, player.Id)
 	if err != nil {
 		log.Printf("Could not update player payment: %v", err)
-		return "", fmt.Errorf("Could not update player payment, please try again.")
+		return nil, nil, nil, fmt.Errorf("Could not update player payment, please try again.")
 	}
 
-	return fmt.Sprintf("%s has paid for the game against %s on %s", player.Name, game.Opponent, game.Date.Format("2006-01-02 15:04")), nil
+	game, players, absentees, err := g.GetGameDetails(*chatID)
+	if err != nil {
+		log.Printf("Error retrieving game details: %v", err)
+		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
+	}
+	return game, players, absentees, nil
 }

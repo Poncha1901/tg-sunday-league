@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"tg-sunday-league/services"
 
 	"gopkg.in/tucnak/telebot.v2"
 )
@@ -17,6 +18,7 @@ var (
 	HELP     = Command{"/help", "Show this help message"}
 	NEW      = Command{"/new", "Create a new game with the specified date, time, location, and opponent.\n How to use: /new (YYYY-MM-DD, HH:MM, Location, Opponent)"}
 	REGISTER = Command{"/register", "Register yourself with the specified name for the upcoming game"}
+	OUT      = Command{"/out", "Mark yourself as absent for the upcoming game"}
 	DETAILS  = Command{"/details", "Show the details of the game"}
 	PAID     = Command{"/paid", "Mark you as paid for the game"}
 )
@@ -40,28 +42,37 @@ func (b *Bot) handleNewGame(m *telebot.Message) {
 		b.TelegramBot.Send(m.Chat, "Invalid format. Please use:\n/new (YYYY-MM-DD, HH:MM, Location, Opponent, Optional[Price])")
 		return
 	}
-	res, err := b.GameService.CreateNewGame(m.Chat.ID, m.Sender.ID, m.Sender.FirstName, args)
-
+	game, players, absentees, err := b.GameService.CreateNewGame(m.Chat.ID, m.Sender.ID, m.Sender.FirstName, args)
 	if err != nil {
 		b.TelegramBot.Send(m.Chat, err.Error())
 		return
 	}
-	b.TelegramBot.Send(m.Chat, res)
+	message := b.MessageFormater.GameDetailsMessage(game, players, absentees)
+	b.TelegramBot.Send(m.Chat, message)
 }
 
 func (b *Bot) handleRegisterPlayer(m *telebot.Message) {
+	var status services.PlayerStatus
+	log.Printf("Message: %s", m.Text)
+	switch m.Text {
+	case "/register":
+		status = services.ATTENDING
+	case "/out":
+		status = services.OUT
+	}
 	playerID := m.Sender.ID
 	playerName := m.Sender.FirstName
 	log.Printf("Player ID: %d, Player Name: %s", playerID, playerName)
 	chatID := m.Chat.ID
 
-	registration, err := b.GameService.RegisterPlayer(&chatID, &playerID, &playerName)
-
+	game, players, absentees, err := b.GameService.RegisterPlayer(&chatID, &playerID, &playerName, status)
 	if err != nil {
 		b.TelegramBot.Send(m.Chat, err.Error())
 		return
 	}
-	b.TelegramBot.Send(m.Chat, registration)
+
+	message := b.MessageFormater.GameDetailsMessage(game, players, absentees)
+	b.TelegramBot.Send(m.Chat, message)
 }
 
 func (b *Bot) handleHelp(m *telebot.Message) {
@@ -73,12 +84,13 @@ func (b *Bot) handleHelp(m *telebot.Message) {
 }
 
 func (b *Bot) handleDetails(m *telebot.Message) {
-	game, err := b.GameService.GetGameDetails(m.Chat.ID)
+	game, players, absentees, err := b.GameService.GetGameDetails(m.Chat.ID)
 	if err != nil {
 		b.TelegramBot.Send(m.Chat, err.Error())
 		return
 	}
-	b.TelegramBot.Send(m.Chat, game)
+	message := b.MessageFormater.GameDetailsMessage(game, players, absentees)
+	b.TelegramBot.Send(m.Chat, message)
 }
 
 func (b *Bot) handlePaid(m *telebot.Message) {
@@ -86,11 +98,13 @@ func (b *Bot) handlePaid(m *telebot.Message) {
 	playerName := m.Sender.FirstName
 	chatID := m.Chat.ID
 
-	paid, err := b.GameService.RepayGame(&chatID, &playerID, &playerName)
+	game, players, absentees, err := b.GameService.RepayGame(&chatID, &playerID, &playerName)
 
 	if err != nil {
 		b.TelegramBot.Send(m.Chat, err.Error())
 		return
 	}
-	b.TelegramBot.Send(m.Chat, paid)
+
+	message := b.MessageFormater.GameDetailsMessage(game, players, absentees)
+	b.TelegramBot.Send(m.Chat, message)
 }

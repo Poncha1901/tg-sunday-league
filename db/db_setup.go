@@ -10,29 +10,37 @@ import (
 // SetupDatabase initializes the SQLite database and creates the required tables
 func SetupDatabase(db *sql.DB) error {
 	tables := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id VARCHAR(36) PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			name VARCHAR NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS games (
-			id INTEGER PRIMARY KEY,
-			chat_id INTEGER64 NOT NULL,
-			opponent TEXT NOT NULL,
-			location TEXT NOT NULL,
-			date TIMESTAMP NOT NULL,
+			id VARCHAR(36) PRIMARY KEY,
+			chat_id INTEGER,
+			opponent VARCHAR,
+			location VARCHAR,
+			price FLOAT,
+			date DATE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			is_active BOOLEAN DEFAULT TRUE
-		);`,
-		`CREATE TABLE IF NOT EXISTS players (
-			id TEXT PRIMARY KEY, -- UUID stored as TEXT
-			player_id INTEGER64 NOT NULL,
-			name TEXT NOT NULL,
-			is_active BOOLEAN DEFAULT TRUE
-		);`,
-		`CREATE TABLE IF NOT EXISTS game_attendance (
-			game_id INTEGER,
-			player_id TEXT,
-			has_paid BOOLEAN DEFAULT FALSE,
+			created_by INTEGER,
+			is_active BOOL,
+			FOREIGN KEY (created_by) REFERENCES users(id)
+	);`,
+		`CREATE TABLE IF NOT EXISTS player_status (
+			name VARCHAR PRIMARY KEY
+	);`,
+		`CREATE TABLE IF NOT EXISTS game_players (
+			game_id VARCHAR(36),
+			user_id VARCHAR(36),
+			status VARCHAR,
+			has_paid BOOL,
+			joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (game_id) REFERENCES games(id),
-			FOREIGN KEY (player_id) REFERENCES players(id),
-			PRIMARY KEY (game_id, player_id)
-		);`,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			FOREIGN KEY (status) REFERENCES player_status(name),
+			PRIMARY KEY (game_id, user_id)
+	);`,
 	}
 
 	for _, table := range tables {

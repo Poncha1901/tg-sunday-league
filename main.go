@@ -32,7 +32,7 @@ func main() {
 	gameRepo := &repositories.GameRepository{Db: dbInstance}
 	gameService := &services.GameService{GameRepository: gameRepo}
 
-	// Start the bot with repository dependency
+	// Start the bot with service dependency
 	b, err := bot.NewBot(cfg.BotToken, gameService)
 	if err != nil {
 		log.Fatalf("Could not create bot: %v", err)

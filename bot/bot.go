@@ -34,9 +34,10 @@ func NewBot(token string, gameService services.IGameService, messageFormater IMe
 
 func (b *Bot) setupHandlers() {
 	b.TelegramBot.Handle(NEW.Name, b.handleNewGame)
-	b.TelegramBot.Handle(REGISTER.Name, b.handleRegisterPlayer)
+	b.TelegramBot.Handle(IN.Name, b.handleRegisterPlayer)
 	b.TelegramBot.Handle(OUT.Name, b.handleRegisterPlayer)
 	b.TelegramBot.Handle(HELP.Name, b.handleHelp)
 	b.TelegramBot.Handle(DETAILS.Name, b.handleDetails)
 	b.TelegramBot.Handle(PAID.Name, b.handlePaid)
+	b.TelegramBot.Handle(CANCEL.Name, b.handleCancelGame)
 }

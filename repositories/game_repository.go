@@ -11,6 +11,7 @@ import (
 
 type IGameRepository interface {
 	InsertGame(game *models.Game) (*models.Game, error)
+	CancelGame(game *models.Game) (*models.Game, error)
 	GetLatestGameByChatID(chatID int64) (*models.Game, error)
 	InsertUser(user *models.User) (int64, error)
 	InsertGamePlayer(game *models.Game, player *models.User) (string, error)
@@ -68,6 +69,37 @@ func (r *GameRepository) InsertGame(game *models.Game) (*models.Game, error) {
 	}
 
 	log.Println("Game created and committed successfully.")
+	return game, nil
+}
+
+func (r *GameRepository) CancelGame(game *models.Game) (*models.Game, error) {
+	tx, err := r.Db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, err := tx.Prepare(
+		`UPDATE games
+		SET is_active = 0
+		WHERE id = ?`)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	defer stmt.Close()
+	_, err = stmt.Exec(game.Id)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	log.Println("Game cancelled and committed successfully.")
 	return game, nil
 }
 

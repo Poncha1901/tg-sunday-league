@@ -7,6 +7,7 @@ import (
 
 type IMessageFormater interface {
 	GameDetailsMessage(game *models.Game, players, absentees *[]models.User) string
+	HelpMessage() string
 	formatUserList(l *[]models.User) string
 }
 
@@ -21,6 +22,17 @@ func (m *MessageFormatter) GameDetailsMessage(game *models.Game, players, absent
 		game.Opponent,
 		playerList,
 		absenteesList)
+}
+
+func (m *MessageFormatter) HelpMessage() string {
+
+	helpText := `Bot Commands:
+
+	`
+	for _, c := range commands {
+		helpText += c.Name + " - " + c.Description + "\n"
+	}
+	return helpText
 }
 
 func (m *MessageFormatter) formatUserList(l *[]models.User) string {

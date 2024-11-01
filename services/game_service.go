@@ -21,9 +21,10 @@ const (
 
 type IGameService interface {
 	CreateNewGame(chatId int64, userId int64, userName string, gameData []string) (*models.Game, *[]models.User, *[]models.User, error)
+	CancelGame(chatId int64) (*models.Game, error)
 	RegisterPlayer(chatId *int64, userId *int64, userName *string, status PlayerStatus) (*models.Game, *[]models.User, *[]models.User, error)
 	GetGameDetails(chatId int64) (*models.Game, *[]models.User, *[]models.User, error)
-	RepayGame(chatId *int64, userId *int64, userName *string) (*models.Game, *[]models.User, *[]models.User, error)
+	RepayGame(chatId *int64, userId *int64) (*models.Game, *[]models.User, *[]models.User, error)
 }
 
 type GameService struct {
@@ -98,16 +99,28 @@ func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string,
 	var players *[]models.User
 	var absentees *[]models.User
 
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
-	}
 	game, players, absentees, err = g.GetGameDetails(chatId)
-	log.Printf("Game created successfully: %v", game)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
 	}
+	log.Printf("Game created successfully: %v", game)
 	return game, players, absentees, nil
 
+}
+
+func (g *GameService) CancelGame(chatId int64) (*models.Game, error) {
+	game, err := g.GameRepository.GetLatestGameByChatID(chatId)
+	if err != nil {
+		log.Printf("Could not find the latest game: %v", err)
+		return nil, fmt.Errorf("Could not find the latest game, please try again.")
+	}
+
+	game, err = g.GameRepository.CancelGame(game)
+	if err != nil {
+		log.Printf("Could not cancel the game: %v", err)
+		return nil, fmt.Errorf("Could not cancel the game, please try again.")
+	}
+	return game, nil
 }
 
 func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *string, status PlayerStatus) (*models.Game, *[]models.User, *[]models.User, error) {
@@ -165,9 +178,12 @@ func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *str
 
 func (g *GameService) GetGameDetails(chatID int64) (*models.Game, *[]models.User, *[]models.User, error) {
 	game, err := g.GameRepository.GetLatestGameByChatID(chatID)
-	if err != nil || game == nil {
+	if game == nil {
+		return nil, nil, nil, fmt.Errorf("No upcoming game.")
+	}
+	if err != nil {
 		log.Printf("Error retrieving game details: %v", err)
-		return nil, nil, nil, fmt.Errorf("Could not retrieve game details, please try again.")
+		return nil, nil, nil, fmt.Errorf("No.")
 	}
 
 	allPlayers, err := g.GameRepository.GetGamePlayers(game.Id)
@@ -189,7 +205,7 @@ func (g *GameService) GetGameDetails(chatID int64) (*models.Game, *[]models.User
 	return game, &players, &absentees, nil
 }
 
-func (g *GameService) RepayGame(chatID *int64, userId *int64, userName *string) (*models.Game, *[]models.User, *[]models.User, error) {
+func (g *GameService) RepayGame(chatID *int64, userId *int64) (*models.Game, *[]models.User, *[]models.User, error) {
 	game, err := g.GameRepository.GetLatestGameByChatID(*chatID)
 	if err != nil {
 		log.Printf("Could not find the latest game: %v", err)

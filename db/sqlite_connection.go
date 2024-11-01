@@ -11,8 +11,8 @@ type Sqllite struct {
 	Connect func() (*sql.DB, error)
 }
 
-func Connect() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", "sunday_league.sqlite")
+func Connect(db_path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", db_path)
 	if err != nil {
 		return nil, err
 	}

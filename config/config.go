@@ -9,7 +9,8 @@ import (
 )
 
 type Config struct {
-	BotToken string
+	BotToken      string
+	SqlliteDbPath string
 }
 
 func LoadConfig() (*Config, error) {
@@ -23,8 +24,14 @@ func LoadConfig() (*Config, error) {
 	if botToken == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is not set")
 	}
+	var sqlliteDbPath string = os.Getenv("SQL_LITE_DB_PATH")
+
+	if sqlliteDbPath == "" {
+		return nil, fmt.Errorf("SQL_LITE_DB_PATH is not set")
+	}
 
 	return &Config{
-		BotToken: botToken,
+		BotToken:      botToken,
+		SqlliteDbPath: sqlliteDbPath,
 	}, nil
 }

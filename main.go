@@ -17,7 +17,7 @@ func main() {
 	}
 
 	// Connect to the SQLite database
-	dbInstance, dbErr := db.Connect()
+	dbInstance, dbErr := db.Connect(cfg.SqlliteDbPath)
 	if dbErr != nil {
 		log.Fatalf("Could not connect to database: %v", dbErr)
 	}

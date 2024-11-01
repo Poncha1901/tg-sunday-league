@@ -88,9 +88,8 @@ func (b *Bot) handleRegisterPlayer(m *telebot.Message) {
 		return
 	}
 	var status services.PlayerStatus
-	log.Printf("Message: %s", m.Text)
 	switch m.Text {
-	case "/register":
+	case "/in":
 		status = services.ATTENDING
 	case "/out":
 		status = services.OUT
@@ -102,8 +101,6 @@ func (b *Bot) handleRegisterPlayer(m *telebot.Message) {
 	} else {
 		playerName = m.Sender.FirstName
 	}
-
-	log.Printf("Player ID: %d, Player Name: %s", playerID, playerName)
 	chatID := m.Chat.ID
 
 	game, players, absentees, err := b.GameService.RegisterPlayer(&chatID, &playerID, &playerName, status)

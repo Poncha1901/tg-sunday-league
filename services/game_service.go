@@ -38,7 +38,6 @@ func (g *GameService) CreateNewGame(chatId int64, userId int64, userName string,
 		log.Printf("Error retrieving user: %v", err)
 		return nil, nil, nil, fmt.Errorf("Could not retrieve user, please try again.")
 	}
-	log.Printf("User found: %v", userFound)
 	if userFound == nil {
 		newUser := &models.User{
 			Id:     uuid.New(),
@@ -130,6 +129,10 @@ func (g *GameService) RegisterPlayer(chatID *int64, userId *int64, userName *str
 		log.Printf("Could not find the latest game: %v", err)
 		return nil, nil, nil, fmt.Errorf("Could not find the latest game, please try again.")
 	}
+	if game == nil {
+		log.Printf("No existing game")
+		return nil, nil, nil, fmt.Errorf("No existing game.")
+	}
 
 	idFound, _ := g.GameRepository.GetUserByUserID(*userId)
 
@@ -210,6 +213,9 @@ func (g *GameService) RepayGame(chatID *int64, userId *int64) (*models.Game, *[]
 	if err != nil {
 		log.Printf("Could not find the latest game: %v", err)
 		return nil, nil, nil, fmt.Errorf("Could not find the latest game, please try again.")
+	}
+	if game == nil {
+		return nil, nil, nil, fmt.Errorf("No upcoming game.")
 	}
 
 	player, err := g.GameRepository.GetUserByUserID(*userId)
